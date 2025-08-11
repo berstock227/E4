@@ -1,0 +1,54 @@
+{
+  "name": "structure-vue3-project-2025",
+  "version": "1.0.0",
+  "description": "Vue 3 Project with modern architecture",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "server": "node mock-server.js",
+    "dev:full": "concurrently \"npm run server\" \"npm run dev\"",
+    "start": "npm run dev:full",
+    "test": "vitest",
+    "test:e2e": "cypress run",
+    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix --ignore-path .gitignore",
+    "format": "prettier --write src/",
+    "type-check": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@headlessui/vue": "^1.7.16",
+    "@heroicons/vue": "^2.0.18",
+    "autoprefixer": "^10.4.16",
+    "axios": "^1.6.0",
+    "chart.js": "^4.5.0",
+    "cors": "^2.8.5",
+    "date-fns": "^2.30.0",
+    "dompurify": "^3.2.6",
+    "express": "^5.1.0",
+    "lodash-es": "^4.17.21",
+    "marked": "^16.1.2",
+    "pinia": "^2.1.7",
+    "postcss": "^8.4.32",
+    "tailwindcss": "^3.3.6",
+    "vue": "^3.4.0",
+    "vue-chartjs": "^5.3.2",
+    "vue-i18n": "^9.8.0",
+    "vue-router": "^4.2.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.9.0",
+    "@vitejs/plugin-vue": "^4.5.0",
+    "@vue/test-utils": "^2.4.0",
+    "cypress": "^13.6.0",
+    "eslint": "^8.54.0",
+    "eslint-plugin-vue": "^9.18.1",
+    "prettier": "^3.1.0",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
