@@ -1,293 +1,117 @@
-import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import { authAPI } from '@/api/auth'
-import { AUTH_CONFIG } from '@/utils/constants'
+import { defineStore } from 'pinia';
+import { ref, computed } from 'vue';
+import { authAPI } from '@/api/auth';
+import { AUTH_CONFIG } from '@/utils/constants';
 
 export const useAuthStore = defineStore('auth', () => {
   // State
-  const user = ref(null)
-  const token = ref(localStorage.getItem(AUTH_CONFIG.TOKEN_KEY) || null)
-  const refreshToken = ref(localStorage.getItem(AUTH_CONFIG.REFRESH_TOKEN_KEY) || null)
-  const isLoading = ref(false)
-  const error = ref(null)
+  const user = ref(null);
+  const token = ref(localStorage.getItem(AUTH_CONFIG.TOKEN_KEY) || null);
+  const refreshToken = ref(localStorage.getItem(AUTH_CONFIG.REFRESH_TOKEN_KEY) || null);
+  const isLoading = ref(false);
+  const error = ref(null);
 
   // Getters
-  const isAuthenticated = computed(() => !!token.value && !!user.value)
-  const isAdmin = computed(() => user.value?.role === 'admin')
-  const isModerator = computed(() => user.value?.role === 'moderator' || user.value?.role === 'admin')
-  const userRole = computed(() => user.value?.role || 'guest')
-  const userName = computed(() => user.value?.name || 'Guest')
-  const userEmail = computed(() => user.value?.email || '')
-  const userAvatar = computed(() => user.value?.avatar || null)
+  const isAuthenticated = computed(() => !!token.value && !!user.value);
+  const isAdmin = computed(() => user.value?.role === 'admin');
 
-  // Actions
-  const initializeAuth = () => {
-    const storedUser = localStorage.getItem(AUTH_CONFIG.USER_KEY)
-    if (storedUser) {
+  // Helpers
+  const clearAuth = () => {
+    token.value = null;
+    refreshToken.value = null;
+    user.value = null;
+    localStorage.removeItem(AUTH_CONFIG.TOKEN_KEY);
+    localStorage.removeItem(AUTH_CONFIG.REFRESH_TOKEN_KEY);
+    localStorage.removeItem(AUTH_CONFIG.USER_KEY);
+  };
+
+  const initializeAuth = async () => {
+    const storedUser = localStorage.getItem(AUTH_CONFIG.USER_KEY);
+    if (storedUser && storedUser !== 'undefined') {
       try {
-        user.value = JSON.parse(storedUser)
-      } catch (e) {
-        console.error('Failed to parse stored user data:', e)
-        clearAuth()
+        user.value = JSON.parse(storedUser);
+      } catch {
+        clearAuth();
       }
     }
-  }
-
-  const login = async (credentials) => {
-    isLoading.value = true
-    error.value = null
-    
-    try {
-      const response = await authAPI.login(credentials)
-      
-      // Store tokens
-      token.value = response.access_token
-      refreshToken.value = response.refresh_token
-      user.value = response.user
-      
-      // Save to localStorage
-      localStorage.setItem(AUTH_CONFIG.TOKEN_KEY, response.access_token)
-      localStorage.setItem(AUTH_CONFIG.REFRESH_TOKEN_KEY, response.refresh_token)
-      localStorage.setItem(AUTH_CONFIG.USER_KEY, JSON.stringify(response.user))
-      
-      return response
-    } catch (err) {
-      error.value = err.message || 'Login failed'
-      throw err
-    } finally {
-      isLoading.value = false
-    }
-  }
-
-  const register = async (userData) => {
-    isLoading.value = true
-    error.value = null
-    
-    try {
-      const response = await authAPI.register(userData)
-      
-      // Auto login after successful registration
-      if (response.access_token) {
-        token.value = response.access_token
-        refreshToken.value = response.refresh_token
-        user.value = response.user
-        
-        localStorage.setItem(AUTH_CONFIG.TOKEN_KEY, response.access_token)
-        localStorage.setItem(AUTH_CONFIG.REFRESH_TOKEN_KEY, response.refresh_token)
-        localStorage.setItem(AUTH_CONFIG.USER_KEY, JSON.stringify(response.user))
+    const t = localStorage.getItem(AUTH_CONFIG.TOKEN_KEY);
+    if (t && !user.value) {
+      // Try get profile silently
+      try {
+        await fetchProfile();
+      } catch {
+        clearAuth();
       }
-      
-      return response
-    } catch (err) {
-      error.value = err.message || 'Registration failed'
-      throw err
-    } finally {
-      isLoading.value = false
     }
-  }
+  };
 
-  const logout = async () => {
-    isLoading.value = true
-    error.value = null
-    
+  const login = async (payload) => {
+    isLoading.value = true;
+    error.value = null;
     try {
-      if (token.value) {
-        await authAPI.logout()
+      const res = await authAPI.login(payload);
+      const data = res.data ?? res; // support axios or wrapped
+      const access = data.access_token || data.data?.access_token;
+      const refresh = data.refresh_token || data.data?.refresh_token;
+      const u = data.user || data.data?.user;
+      token.value = access;
+      refreshToken.value = refresh || null;
+      if (token.value) localStorage.setItem(AUTH_CONFIG.TOKEN_KEY, token.value);
+      if (refreshToken.value) localStorage.setItem(AUTH_CONFIG.REFRESH_TOKEN_KEY, refreshToken.value);
+      if (u) {
+        user.value = u;
+        localStorage.setItem(AUTH_CONFIG.USER_KEY, JSON.stringify(u));
+      } else {
+        await fetchProfile();
       }
+      return data;
     } catch (err) {
-      console.error('Logout API error:', err)
+      clearAuth();
+      throw err;
     } finally {
-      clearAuth()
-      isLoading.value = false
+      isLoading.value = false;
     }
-  }
-
-  const refreshAuthToken = async () => {
-    if (!refreshToken.value) {
-      throw new Error('No refresh token available')
-    }
-    
-    try {
-      const response = await authAPI.refreshToken(refreshToken.value)
-      
-      token.value = response.access_token
-      refreshToken.value = response.refresh_token
-      
-      localStorage.setItem(AUTH_CONFIG.TOKEN_KEY, response.access_token)
-      localStorage.setItem(AUTH_CONFIG.REFRESH_TOKEN_KEY, response.refresh_token)
-      
-      return response
-    } catch (err) {
-      clearAuth()
-      throw err
-    }
-  }
+  };
 
   const fetchProfile = async () => {
-    isLoading.value = true
-    error.value = null
-    
+    isLoading.value = true;
+    error.value = null;
     try {
-      const response = await authAPI.getProfile()
-      user.value = response.user
-      localStorage.setItem(AUTH_CONFIG.USER_KEY, JSON.stringify(response.user))
-      return response
-    } catch (err) {
-      error.value = err.message || 'Failed to fetch profile'
-      throw err
-    } finally {
-      isLoading.value = false
-    }
-  }
-
-  const updateProfile = async (profileData) => {
-    isLoading.value = true
-    error.value = null
-    
-    try {
-      const response = await authAPI.updateProfile(profileData)
-      user.value = response.user
-      localStorage.setItem(AUTH_CONFIG.USER_KEY, JSON.stringify(response.user))
-      return response
-    } catch (err) {
-      error.value = err.message || 'Failed to update profile'
-      throw err
-    } finally {
-      isLoading.value = false
-    }
-  }
-
-  const changePassword = async (passwordData) => {
-    isLoading.value = true
-    error.value = null
-    
-    try {
-      const response = await authAPI.changePassword(passwordData)
-      return response
-    } catch (err) {
-      error.value = err.message || 'Failed to change password'
-      throw err
-    } finally {
-      isLoading.value = false
-    }
-  }
-
-  const forgotPassword = async (email) => {
-    isLoading.value = true
-    error.value = null
-    
-    try {
-      const response = await authAPI.forgotPassword(email)
-      return response
-    } catch (err) {
-      error.value = err.message || 'Failed to send reset email'
-      throw err
-    } finally {
-      isLoading.value = false
-    }
-  }
-
-  const resetPassword = async (resetData) => {
-    isLoading.value = true
-    error.value = null
-    
-    try {
-      const response = await authAPI.resetPassword(resetData)
-      return response
-    } catch (err) {
-      error.value = err.message || 'Failed to reset password'
-      throw err
-    } finally {
-      isLoading.value = false
-    }
-  }
-
-  const verifyEmail = async (token) => {
-    isLoading.value = true
-    error.value = null
-    
-    try {
-      const response = await authAPI.verifyEmail(token)
-      if (user.value) {
-        user.value.email_verified_at = new Date().toISOString()
-        localStorage.setItem(AUTH_CONFIG.USER_KEY, JSON.stringify(user.value))
+      const res = await authAPI.getProfile();
+      const payload = res.data ?? res;
+      const u = payload.user || payload.data?.user;
+      if (u) {
+        user.value = u;
+        localStorage.setItem(AUTH_CONFIG.USER_KEY, JSON.stringify(u));
       }
-      return response
+      return u;
     } catch (err) {
-      error.value = err.message || 'Failed to verify email'
-      throw err
+      error.value = err.message || 'Failed to fetch profile';
+      throw err;
     } finally {
-      isLoading.value = false
+      isLoading.value = false;
     }
-  }
+  };
 
-  const resendVerification = async () => {
-    isLoading.value = true
-    error.value = null
-    
+  const logout = async () => {
     try {
-      const response = await authAPI.resendVerification()
-      return response
-    } catch (err) {
-      error.value = err.message || 'Failed to resend verification'
-      throw err
-    } finally {
-      isLoading.value = false
-    }
-  }
+      await authAPI.logout();
+    } catch {}
+    clearAuth();
+  };
 
-  const clearAuth = () => {
-    user.value = null
-    token.value = null
-    refreshToken.value = null
-    error.value = null
-    
-    localStorage.removeItem(AUTH_CONFIG.TOKEN_KEY)
-    localStorage.removeItem(AUTH_CONFIG.REFRESH_TOKEN_KEY)
-    localStorage.removeItem(AUTH_CONFIG.USER_KEY)
-  }
-
-  const clearError = () => {
-    error.value = null
-  }
-
-  const updateUser = (userData) => {
-    user.value = { ...user.value, ...userData }
-    localStorage.setItem(AUTH_CONFIG.USER_KEY, JSON.stringify(user.value))
-  }
+  const clearError = () => (error.value = null);
+  const updateUser = (partial) => {
+    user.value = { ...(user.value || {}), ...(partial || {}) };
+    localStorage.setItem(AUTH_CONFIG.USER_KEY, JSON.stringify(user.value));
+  };
 
   return {
-    // State
-    user,
-    token,
-    refreshToken,
-    isLoading,
-    error,
-    
-    // Getters
-    isAuthenticated,
-    isAdmin,
-    isModerator,
-    userRole,
-    userName,
-    userEmail,
-    userAvatar,
-    
-    // Actions
-    initializeAuth,
-    login,
-    register,
-    logout,
-    refreshAuthToken,
-    fetchProfile,
-    updateProfile,
-    changePassword,
-    forgotPassword,
-    resetPassword,
-    verifyEmail,
-    resendVerification,
-    clearAuth,
-    clearError,
-    updateUser
-  }
-})
+    // state
+    user, token, refreshToken, isLoading, error,
+    // getters
+    isAuthenticated, isAdmin,
+    // actions
+    initializeAuth, login, fetchProfile, logout, clearError, updateUser, clearAuth,
+  };
+});
